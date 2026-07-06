@@ -1,53 +1,113 @@
 import os
+import re
 import pandas as pd
 from rapidfuzz import fuzz
 
 INPUT_FILE = "data/processed/cleaned_products.csv"
 OUTPUT_FILE = "data/processed/matched_products.csv"
 
-SIMILARITY_THRESHOLD = 90
+SIMILARITY_THRESHOLD = 85
 
 
+# ----------------------------------------------------
+# Create a base model name
+# ----------------------------------------------------
+def normalize_model(name):
+
+    name = str(name).lower()
+
+    # remove brackets
+    name = re.sub(r"\(.*?\)", "", name)
+
+    # remove storage
+    name = re.sub(r"\b\d+\s?gb\b", "", name)
+    name = re.sub(r"\b\d+\s?tb\b", "", name)
+
+    # remove RAM
+    name = re.sub(r"\b\d+\s?ram\b", "", name)
+
+    # remove processor words
+    remove_words = [
+        "intel",
+        "amd",
+        "ryzen",
+        "core",
+        "graphics",
+        "processor",
+        "ssd",
+        "hdd",
+        "display",
+        "ips",
+        "oled",
+        "wuxga",
+        "fhd",
+        "uhd",
+        "touch",
+        "backlit",
+        "keyboard",
+        "windows",
+        "win",
+        "warranty"
+    ]
+
+    for word in remove_words:
+        name = re.sub(rf"\b{word}\b", "", name)
+
+    name = re.sub(r"[^a-z0-9 ]", " ", name)
+    name = re.sub(r"\s+", " ", name)
+
+    return name.strip()
+
+
+# ----------------------------------------------------
+# Assign Product IDs
+# ----------------------------------------------------
 def assign_product_groups(df):
 
-    product_groups = []
-    known_products = []
+    product_ids = []
 
-    group_counter = 1
+    known = []
 
-    for clean_name in df["clean_name"]:
+    counter = 1
 
-        matched = False
+    for _, row in df.iterrows():
 
-        for group in known_products:
+        current = normalize_model(row["clean_name"])
+
+        found = False
+
+        for product in known:
 
             similarity = fuzz.token_sort_ratio(
-                clean_name,
-                group["clean_name"]
+                current,
+                product["name"]
             )
 
             if similarity >= SIMILARITY_THRESHOLD:
 
-                product_groups.append(group["product_id"])
-                matched = True
+                product_ids.append(product["id"])
+                found = True
                 break
 
-        if not matched:
+        if not found:
 
-            product_id = f"P{group_counter:04d}"
+            pid = f"P{counter:04d}"
 
-            known_products.append({
-                "product_id": product_id,
-                "clean_name": clean_name
+            known.append({
+                "id": pid,
+                "name": current
             })
 
-            product_groups.append(product_id)
+            product_ids.append(pid)
 
-            group_counter += 1
+            counter += 1
 
-    return product_groups
+    return product_ids
 
 
+# ----------------------------------------------------
+# Main
+# ----------------------------------------------------
 def main():
 
     print("=" * 60)
@@ -72,6 +132,11 @@ def main():
         inplace=True
     )
 
+    os.makedirs(
+        "data/processed",
+        exist_ok=True
+    )
+
     df.to_csv(
         OUTPUT_FILE,
         index=False
@@ -80,20 +145,17 @@ def main():
     print("\nMatching Complete!")
 
     print(f"Matched products : {len(df)}")
-
-    print(
-        f"Unique Products : {df['product_id'].nunique()}"
-    )
+    print(f"Unique Products : {df['product_id'].nunique()}")
 
     print(f"\nSaved to\n{OUTPUT_FILE}")
 
-    print("\nSample:\n")
+    print("\nSample\n")
 
     print(
         df[
             [
                 "product_id",
-                "clean_name",
+                "product_name",
                 "marketplace",
                 "price_numeric"
             ]

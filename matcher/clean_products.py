@@ -70,12 +70,31 @@ def extract_price(price):
     if pd.isna(price):
         return None
 
-    numbers = re.findall(r"\d+", str(price))
+    text = str(price)
 
-    if not numbers:
+    # Find prices like:
+    # 1,46,599
+    # 146599
+    matches = re.findall(r"\d[\d,]*", text)
+
+    if not matches:
         return None
 
-    return int("".join(numbers))
+    prices = []
+
+    for match in matches:
+
+        number = int(match.replace(",", ""))
+
+        # Ignore tiny numbers like 16GB, 512GB, 2025 etc.
+        if number >= 1000:
+            prices.append(number)
+
+    if not prices:
+        return None
+
+    # Usually the actual price is the largest number
+    return max(prices)
 
 
 # ----------------------------------------------------

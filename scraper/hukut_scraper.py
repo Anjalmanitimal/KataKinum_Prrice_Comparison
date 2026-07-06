@@ -161,30 +161,22 @@ def scrape_hukut(
             # -----------------------
 
             price = "N/A"
-
             try:
 
-                container = card.find_element(
+                product_card = card.find_element(
                     By.XPATH,
-                    "./ancestor::*[self::div or self::article][1]"
+                    "./ancestor::div[contains(@class,'flex-col')][1]"
                 )
+                prices = product_card.find_elements(
+                    By.XPATH,
+                    ".//span[contains(text(),'Rs')]"
+                 )
 
-                lines = container.text.split("\n")
-
-                for line in lines:
-
-                    line = line.strip()
-
-                    if (
-                        "Rs" in line
-                        or "रु" in line
-                        or "," in line
-                    ):
-                        price = line
-                        break
+                if prices:
+                    price = prices[0].text.strip()
 
             except Exception:
-                pass
+             pass
 
             products.append({
 
