@@ -57,3 +57,14 @@ data/processed/*.csv
 # ===================================
 *.tmp
 *.bak
+
+# Next.js
+frontend/node_modules/
+frontend/.next/
+
+# Next cache
+.next/
+node_modules/
+
+# TypeScript
+*.tsbuildinfo
