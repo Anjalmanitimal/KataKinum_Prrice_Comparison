@@ -1,27 +1,80 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getProduct } from "@/lib/api";
+
+type Listing = {
+  product_id: string;
+  product_name: string;
+  marketplace: string;
+  price: string;
+  price_numeric: number | null;
+  link: string;
+};
+
+const STORE_STYLES: Record<string, string> = {
+  Daraz: "bg-orange-50 text-orange-700 ring-orange-200",
+  Hukut: "bg-sky-50 text-sky-700 ring-sky-200",
+  Oliz: "bg-violet-50 text-violet-700 ring-violet-200",
+};
+
+function storeStyle(marketplace: string) {
+  return STORE_STYLES[marketplace] ?? "bg-slate-100 text-slate-700 ring-slate-200";
+}
 
 export default function ProductPage() {
   const params = useParams();
 
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<Listing[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadData() {
-      const data = await getProduct(params.id as string);
-      setProducts(data);
+      setLoading(true);
+      setError(null);
+
+      try {
+        const data: Listing[] = await getProduct(params.id as string);
+
+        const sorted = [...data].sort((a, b) => {
+          if (a.price_numeric == null) return 1;
+          if (b.price_numeric == null) return -1;
+          return a.price_numeric - b.price_numeric;
+        });
+
+        setProducts(sorted);
+      } catch {
+        setError("Couldn't load this comparison. The backend may be offline.");
+      } finally {
+        setLoading(false);
+      }
     }
 
     loadData();
   }, [params.id]);
 
-  if (products.length === 0) {
+  if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100 text-slate-900">
-        Loading...
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background text-slate-500">
+        <span className="h-10 w-10 animate-spin rounded-full border-4 border-brand-100 border-t-brand-600" />
+        <p className="font-medium">Loading comparison...</p>
+      </div>
+    );
+  }
+
+  if (error || products.length === 0) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-6 text-center text-slate-500">
+        <p>{error ?? "No listings found for this product."}</p>
+        <Link
+          href="/"
+          className="rounded-xl bg-ink-900 px-5 py-2.5 font-semibold text-white transition hover:bg-brand-600"
+        >
+          ← Back to search
+        </Link>
       </div>
     );
   }
@@ -29,35 +82,44 @@ export default function ProductPage() {
   const cheapest = products[0];
 
   return (
-    <main className="min-h-screen bg-slate-100 px-6 py-10 text-slate-900">
+    <main className="min-h-screen bg-background px-6 py-10 text-ink-900">
 
       <div className="mx-auto max-w-6xl">
 
-        <h1 className="mb-8 text-4xl font-bold text-slate-900">
+        <Link
+          href="/"
+          className="mb-6 inline-flex items-center gap-1 text-sm font-medium text-slate-500 transition hover:text-brand-600"
+        >
+          ← Back to search
+        </Link>
+
+        <h1 className="mb-8 text-4xl font-bold text-ink-900">
           {cheapest.product_name}
         </h1>
 
         <div className="mb-8 rounded-2xl border border-emerald-200 bg-emerald-50 p-8 shadow-sm">
 
-          <p className="text-sm font-semibold uppercase tracking-wider text-emerald-700">
-            Best Price
+          <p className="text-sm font-semibold uppercase tracking-wider text-accent-strong">
+            Best Price · {products.length} store{products.length === 1 ? "" : "s"} compared
           </p>
 
-          <h2 className="mt-2 text-5xl font-extrabold text-emerald-600">
+          <h2 className="mt-2 text-5xl font-extrabold text-accent-strong">
             {cheapest.price}
           </h2>
 
-          <p className="mt-2 text-lg text-slate-700">
+          <span
+            className={`mt-3 inline-flex items-center rounded-lg px-3 py-1 text-sm font-semibold ring-1 ring-inset ${storeStyle(cheapest.marketplace)}`}
+          >
             {cheapest.marketplace}
-          </p>
+          </span>
 
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md">
+        <div className="overflow-hidden rounded-2xl border border-surface-border bg-surface shadow-md">
 
           <table className="w-full">
 
-            <thead className="bg-slate-800 text-white">
+            <thead className="bg-ink-900 text-white">
 
               <tr>
                 <th className="px-6 py-4 text-left">Store</th>
@@ -69,17 +131,26 @@ export default function ProductPage() {
 
             <tbody>
 
-              {products.map((item) => (
+              {products.map((item, index) => (
                 <tr
-                  key={`${item.product_id}-${item.marketplace}`}
-                  className="border-t border-slate-200 hover:bg-slate-50"
+                  key={`${item.product_id}-${item.marketplace}-${index}`}
+                  className="border-t border-surface-border transition hover:bg-brand-50/40"
                 >
-                  <td className="px-6 py-4 font-medium text-slate-800">
-                    {item.marketplace}
+                  <td className="px-6 py-4">
+                    <span
+                      className={`inline-flex items-center rounded-lg px-2.5 py-1 text-sm font-semibold ring-1 ring-inset ${storeStyle(item.marketplace)}`}
+                    >
+                      {item.marketplace}
+                    </span>
                   </td>
 
-                  <td className="px-6 py-4 text-lg font-bold text-emerald-600">
+                  <td className="px-6 py-4 text-lg font-bold text-ink-900">
                     {item.price}
+                    {index === 0 && (
+                      <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-semibold text-accent-strong">
+                        Best
+                      </span>
+                    )}
                   </td>
 
                   <td className="px-6 py-4">
@@ -87,7 +158,7 @@ export default function ProductPage() {
                       href={item.link}
                       target="_blank"
                       rel="noreferrer"
-                      className="rounded-lg bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700"
+                      className="rounded-lg bg-ink-900 px-4 py-2 text-white transition hover:bg-brand-600"
                     >
                       Visit Store
                     </a>
