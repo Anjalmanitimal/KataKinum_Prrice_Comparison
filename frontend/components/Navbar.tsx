@@ -21,9 +21,12 @@ export default function Navbar() {
           <Link href="/categories" className="transition hover:text-brand-300">
             Categories
           </Link>
-          <span className="cursor-not-allowed text-slate-500">
+          <Link href="/deals" className="transition hover:text-brand-300">
+            Deals
+          </Link>
+          <Link href="/about" className="transition hover:text-brand-300">
             About
-          </span>
+          </Link>
         </div>
 
       </div>

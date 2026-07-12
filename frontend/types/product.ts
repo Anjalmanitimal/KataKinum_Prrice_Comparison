@@ -20,3 +20,36 @@ export interface Category {
   label: string;
   count: number;
 }
+
+export interface PricePoint {
+  date: string;
+  price: number;
+}
+
+export interface PriceTrend {
+  status: "ok" | "insufficient_data";
+  points: PricePoint[];
+  message?: string;
+  trend?: "falling" | "rising" | "stable";
+  recommendation?: string;
+  lowest_recorded?: number;
+  highest_recorded?: number;
+  current?: number | null;
+  first_tracked?: string | null;
+  points_needed?: number;
+}
+
+export interface Deal {
+  product_id: string;
+  product_name: string;
+  best_store: string;
+  best_price: number;
+  best_price_display: string;
+  highest_store: string;
+  highest_price: number;
+  highest_price_display: string;
+  savings: number;
+  savings_percent: number;
+  store_count: number;
+  price_trend: "falling" | "rising" | "stable" | null;
+}

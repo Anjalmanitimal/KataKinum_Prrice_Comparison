@@ -13,6 +13,12 @@ const CATEGORY_ICONS: Record<string, string> = {
   tablet: "📟",
   smartwatch: "⌚",
   earphone: "🎧",
+  bag: "🎒",
+  watch: "🕰️",
+  camera_gear: "🚁",
+  powerbank: "🔋",
+  audio: "🔊",
+  appliance: "🏠",
 };
 
 export default function CategoriesPage() {

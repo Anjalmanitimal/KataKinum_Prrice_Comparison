@@ -8,6 +8,11 @@ OUTPUT_FILE = "data/processed/matched_products.csv"
 
 SIMILARITY_THRESHOLD = 85
 
+TIER_WORDS = {
+    "pro", "max", "plus", "ultra", "mini", "lite",
+    "se", "fe", "air", "note", "neo", "active", "classic",
+}
+
 
 # ----------------------------------------------------
 # Create a base model name
@@ -62,6 +67,29 @@ def normalize_model(name):
 # ----------------------------------------------------
 # Assign Product IDs
 # ----------------------------------------------------
+def has_conflict(name_a, name_b):
+    """True if two normalized names look like different products despite
+    scoring similar on fuzz.token_sort_ratio - a differing model number
+    (e.g. "60" vs "120") or a differing tier word (e.g. "pro" present in
+    one but not the other) is treated as a hard signal they shouldn't be
+    merged, even when the surrounding text is otherwise nearly identical.
+    """
+
+    numbers_a = set(re.findall(r"\d+", name_a))
+    numbers_b = set(re.findall(r"\d+", name_b))
+
+    if numbers_a and numbers_b and not (numbers_a & numbers_b):
+        return True
+
+    tiers_a = {w for w in TIER_WORDS if w in name_a.split()}
+    tiers_b = {w for w in TIER_WORDS if w in name_b.split()}
+
+    if tiers_a != tiers_b:
+        return True
+
+    return False
+
+
 def assign_product_groups(df):
 
     product_ids = []
@@ -83,7 +111,7 @@ def assign_product_groups(df):
                 product["name"]
             )
 
-            if similarity >= SIMILARITY_THRESHOLD:
+            if similarity >= SIMILARITY_THRESHOLD and not has_conflict(current, product["name"]):
 
                 product_ids.append(product["id"])
                 found = True

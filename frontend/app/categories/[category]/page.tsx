@@ -15,6 +15,12 @@ const CATEGORY_LABELS: Record<string, string> = {
   tablet: "Tablets",
   smartwatch: "Smartwatches",
   earphone: "Earphones",
+  bag: "Bags & Backpacks",
+  watch: "Watches",
+  camera_gear: "Drones & Camera Gear",
+  powerbank: "Power Banks & Chargers",
+  audio: "Speakers & Audio",
+  appliance: "Home Appliances",
 };
 
 export default function CategoryPage() {

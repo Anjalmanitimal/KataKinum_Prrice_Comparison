@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { getProduct } from "@/lib/api";
+import { getProduct, getPriceTrend } from "@/lib/api";
+import PriceSparkline from "@/components/PriceSparkline";
+import type { PriceTrend } from "@/types/product";
 
 type Listing = {
   product_id: string;
@@ -28,6 +30,7 @@ export default function ProductPage() {
   const params = useParams();
 
   const [products, setProducts] = useState<Listing[]>([]);
+  const [trend, setTrend] = useState<PriceTrend | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,6 +57,10 @@ export default function ProductPage() {
     }
 
     loadData();
+
+    getPriceTrend(params.id as string)
+      .then(setTrend)
+      .catch(() => setTrend(null));
   }, [params.id]);
 
   if (loading) {
@@ -80,6 +87,22 @@ export default function ProductPage() {
   }
 
   const cheapest = products[0];
+
+  const validOffers = products.filter((p) => p.price_numeric != null);
+  const priciest = validOffers[validOffers.length - 1];
+  const hasSpread =
+    validOffers.length >= 2 &&
+    priciest.price_numeric! > cheapest.price_numeric!;
+  const savings = hasSpread
+    ? priciest.price_numeric! - cheapest.price_numeric!
+    : 0;
+  const savingsPercent = hasSpread
+    ? Math.round((savings / priciest.price_numeric!) * 100)
+    : 0;
+
+  const progressDots = trend?.status === "insufficient_data"
+    ? Array.from({ length: 3 }, (_, i) => i < trend.points.length)
+    : [];
 
   return (
     <main className="min-h-screen bg-background px-6 py-10 text-ink-900">
@@ -114,6 +137,124 @@ export default function ProductPage() {
           </span>
 
         </div>
+
+        {(trend || hasSpread) && (
+          <div className="mb-8 grid gap-6 sm:grid-cols-2">
+
+            {trend && (
+              <div className="rounded-2xl border border-surface-border bg-surface p-8 shadow-sm">
+
+                <p className="text-sm font-semibold uppercase tracking-wider text-slate-500">
+                  Price Trend
+                </p>
+
+                {trend.status === "insufficient_data" ? (
+                  <div className="mt-4">
+                    {trend.current != null && (
+                      <p className="text-3xl font-extrabold text-ink-900">
+                        Rs {trend.current.toLocaleString()}
+                      </p>
+                    )}
+
+                    <div className="mt-4 flex items-center gap-2">
+                      {progressDots.map((filled, i) => (
+                        <span
+                          key={i}
+                          className={`h-2.5 w-2.5 rounded-full ${
+                            filled ? "bg-brand-500" : "bg-slate-200"
+                          }`}
+                        />
+                      ))}
+                      <span className="ml-1 text-sm font-medium text-slate-500">
+                        {trend.points.length}/3 check-ins tracked
+                      </span>
+                    </div>
+
+                    <p className="mt-3 text-sm text-slate-500">
+                      {trend.first_tracked
+                        ? `First tracked ${trend.first_tracked}. `
+                        : ""}
+                      {trend.points_needed} more visit
+                      {trend.points_needed !== 1 ? "s" : ""} on a different
+                      day will unlock a trend line.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-4 flex flex-col items-start gap-6 sm:flex-row sm:items-center">
+                    <PriceSparkline
+                      points={trend.points}
+                      color={
+                        trend.trend === "falling"
+                          ? "#059669"
+                          : trend.trend === "rising"
+                          ? "#dc2626"
+                          : "#64748b"
+                      }
+                    />
+
+                    <div>
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold ${
+                          trend.trend === "falling"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : trend.trend === "rising"
+                            ? "bg-red-50 text-red-700"
+                            : "bg-slate-100 text-slate-700"
+                        }`}
+                      >
+                        {trend.trend === "falling" && "↓ Falling"}
+                        {trend.trend === "rising" && "↑ Rising"}
+                        {trend.trend === "stable" && "→ Stable"}
+                      </span>
+                      <p className="mt-2 text-slate-600">{trend.recommendation}</p>
+                      <p className="mt-1 text-sm text-slate-400">
+                        Based on {trend.points.length} recorded price points
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            )}
+
+            {hasSpread && (
+              <div className="rounded-2xl border border-surface-border bg-surface p-8 shadow-sm">
+
+                <p className="text-sm font-semibold uppercase tracking-wider text-slate-500">
+                  Store Price Spread
+                </p>
+
+                <p className="mt-4 text-3xl font-extrabold text-accent-strong">
+                  Save up to Rs {savings.toLocaleString()}
+                </p>
+
+                <p className="mt-1 text-sm font-medium text-slate-500">
+                  {savingsPercent}% cheaper at {cheapest.marketplace} vs {priciest.marketplace}
+                </p>
+
+                <div className="mt-4 flex items-center gap-3">
+                  <span
+                    className={`rounded-lg px-2.5 py-1 text-sm font-semibold ring-1 ring-inset ${storeStyle(cheapest.marketplace)}`}
+                  >
+                    {cheapest.marketplace} · {cheapest.price}
+                  </span>
+                  <span className="text-slate-300">→</span>
+                  <span
+                    className={`rounded-lg px-2.5 py-1 text-sm font-semibold ring-1 ring-inset ${storeStyle(priciest.marketplace)}`}
+                  >
+                    {priciest.marketplace} · {priciest.price}
+                  </span>
+                </div>
+
+                <p className="mt-4 text-sm text-slate-400">
+                  Across {validOffers.length} stores tracking this product
+                </p>
+
+              </div>
+            )}
+
+          </div>
+        )}
 
         <div className="overflow-hidden rounded-2xl border border-surface-border bg-surface shadow-md">
 
