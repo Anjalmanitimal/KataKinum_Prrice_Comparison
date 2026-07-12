@@ -5,9 +5,11 @@ import { useRef, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Hero from "@/components/Hero";
 import ProductCard from "@/components/ProductCard";
+import FilterSortBar from "@/components/FilterSortBar";
 
 import { searchProducts } from "@/lib/api";
 import type { ProductGroup } from "@/types/product";
+import { applyFilters, DEFAULT_FILTERS, type FilterState } from "@/lib/filterProducts";
 
 export default function Home() {
   const [products, setProducts] = useState<ProductGroup[]>([]);
@@ -15,6 +17,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [stopped, setStopped] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
 
   const controllerRef = useRef<AbortController | null>(null);
 
@@ -27,6 +30,7 @@ export default function Home() {
     setError(null);
     setStopped(false);
     setSearched(true);
+    setFilters(DEFAULT_FILTERS);
 
     try {
       const data = await searchProducts(query, controller.signal);
@@ -87,19 +91,31 @@ export default function Home() {
           </div>
         )}
 
-        {!loading && !error && products.length > 0 && (
-          <>
-            <p className="mt-10 mb-4 text-sm font-medium text-slate-500">
-              Comparing {products.length} product{products.length === 1 ? "" : "s"} across marketplaces
-            </p>
+        {!loading && !error && products.length > 0 && (() => {
+          const filtered = applyFilters(products, filters);
 
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {products.map((product) => (
-                <ProductCard key={product.product_id} product={product} />
-              ))}
+          return (
+            <div className="mt-10">
+              <FilterSortBar
+                filters={filters}
+                onChange={setFilters}
+                resultCount={filtered.length}
+              />
+
+              {filtered.length === 0 ? (
+                <div className="rounded-2xl border border-surface-border bg-surface p-10 text-center text-slate-500">
+                  No products match these filters. Try widening your range.
+                </div>
+              ) : (
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  {filtered.map((product) => (
+                    <ProductCard key={product.product_id} product={product} />
+                  ))}
+                </div>
+              )}
             </div>
-          </>
-        )}
+          );
+        })()}
       </div>
     </main>
   );
