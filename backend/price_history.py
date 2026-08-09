@@ -1,22 +1,13 @@
-import os
 from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 
-HISTORY_FILE = os.path.join("data", "processed", "price_history.csv")
+from db import load_price_history, save_price_history
 
 MIN_HISTORY_POINTS = 3
 TREND_THRESHOLD = 0.01
-
-
-def _ensure_file():
-    if not os.path.exists(HISTORY_FILE):
-        os.makedirs(os.path.dirname(HISTORY_FILE), exist_ok=True)
-        pd.DataFrame(
-            columns=["product_id", "price_numeric", "recorded_at"]
-        ).to_csv(HISTORY_FILE, index=False)
 
 
 def record_snapshot(groups):
@@ -45,9 +36,7 @@ def record_snapshot(groups):
     if not new_rows:
         return
 
-    _ensure_file()
-
-    existing = pd.read_csv(HISTORY_FILE)
+    existing = load_price_history()
     combined = pd.concat([existing, pd.DataFrame(new_rows)], ignore_index=True)
 
     combined.drop_duplicates(
@@ -56,7 +45,7 @@ def record_snapshot(groups):
         inplace=True
     )
 
-    combined.to_csv(HISTORY_FILE, index=False)
+    save_price_history(combined)
 
 
 def get_price_trend(product_id):
@@ -67,9 +56,7 @@ def get_price_trend(product_id):
     that plainly instead of guessing.
     """
 
-    _ensure_file()
-
-    df = pd.read_csv(HISTORY_FILE)
+    df = load_price_history()
     history = df[df["product_id"] == product_id].sort_values("recorded_at")
 
     points = [

@@ -413,10 +413,11 @@ def analytics_average_price_by_category():
 
 @api.route("/analytics/price-trend-overview.png")
 def analytics_price_trend_overview():
-    # Reads the clearly-labeled SIMULATED demo history file, never the
-    # real price_history.csv - see matcher/generate_demo_price_history.py
-    # for why. If that file doesn't exist yet, this returns a 404 rather
-    # than silently falling back to (insufficient) real data.
+    # Reads the clearly-labeled SIMULATED demo history CSV, never the
+    # real price_history table in the database - see
+    # matcher/generate_demo_price_history.py for why. If that file
+    # doesn't exist yet, this returns a 404 rather than silently falling
+    # back to (insufficient) real data.
 
     try:
         demo_history = pd.read_csv("data/processed/price_history_demo.csv")

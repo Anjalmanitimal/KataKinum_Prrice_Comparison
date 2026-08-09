@@ -104,12 +104,12 @@ def price_trend_overview_chart(history_df):
     """Bar chart of how many tracked products are trending up/down/stable.
 
     IMPORTANT: intended for demo/simulated history only (see
-    matcher/generate_demo_price_history.py) - never call this with real
-    price_history.csv data and present it as a real trend summary while
-    there isn't enough real history to back it. The "(simulated demo
-    data)" label is baked into the chart image itself, not just shown
-    around it in the UI, so the disclosure survives even if the image is
-    saved or shared on its own.
+    matcher/generate_demo_price_history.py) - never call this with the
+    real price_history table's data and present it as a real trend
+    summary while there isn't enough real history to back it. The
+    "(simulated demo data)" label is baked into the chart image itself,
+    not just shown around it in the UI, so the disclosure survives even
+    if the image is saved or shared on its own.
     """
 
     counts = {"falling": 0, "stable": 0, "rising": 0}

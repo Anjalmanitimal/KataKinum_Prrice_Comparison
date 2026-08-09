@@ -43,6 +43,11 @@ Thumbs.db
 data/raw/*.csv
 data/processed/*.csv
 
+# ===================================
+# Generated SQLite Database
+# ===================================
+data/processed/*.db
+
 # Keep folder structure
 !data/raw/.gitkeep
 !data/processed/.gitkeep
