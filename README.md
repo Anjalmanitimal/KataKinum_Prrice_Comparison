@@ -10,32 +10,38 @@ A price comparison platform for Nepal's electronics market. Kata Kinum searches 
 - **Price trend prediction** — a linear regression model tracks price history per product and flags whether it's trending up, down, or holding steady.
 - **Verified deal detection** — the best-deals engine cross-checks matched products for conflicting model numbers or tiers before trusting a price gap, so featured deals are real, not mismatched listings.
 - **Sort & filter** — sort by price or relevance, filter by store, and set a price range on any results page.
+- **Analytics** — Matplotlib-generated charts (average price by category, price trend overview) served directly from the backend.
 
 ## Tech Stack
 
-**Backend:** Python, Flask, Pandas, scikit-learn, rapidfuzz, Selenium
+**Backend:** Python, Flask, Pandas, scikit-learn, rapidfuzz, Selenium, Matplotlib, SQLite
 **Frontend:** Next.js, React, TypeScript, Tailwind CSS
 
 ## Project Structure
 
 ```
-backend/    Flask API, search/category/deals/price-trend routes
-matcher/    Product matching, cleaning, and category clustering pipeline
+backend/    Flask API, SQLite data access (db.py), search/category/deals/price-trend/analytics routes
+matcher/    Product matching, cleaning, category clustering, and SQLite migration pipeline
 scraper/    Daraz, Hukut and Oliz scrapers (batch + live search modes)
 frontend/   Next.js app
-data/       Processed CSV datasets (gitignored)
+data/       Processed CSV pipeline output + the SQLite database (gitignored)
 ```
 
 ## Running Locally
 
-**Backend:**
+**Backend** (run from the project root, not from inside `backend/` — relative data paths depend on it):
 
 ```
-cd backend
-python app.py
+python backend/app.py
 ```
 
 Runs on `http://127.0.0.1:5000`.
+
+If `data/processed/matched_products.csv` has been regenerated (e.g. after re-running the scraping/matching pipeline), migrate it into the database first:
+
+```
+python matcher/migrate_to_sqlite.py
+```
 
 **Frontend:**
 
