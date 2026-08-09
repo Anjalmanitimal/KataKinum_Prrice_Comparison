@@ -11,12 +11,14 @@ from scraper.oliz_scraper import scrape_oliz
 from matcher.clean_products import clean_product_name, extract_price
 from rapidfuzz import fuzz
 from price_history import record_snapshot, get_price_trend
+from analytics import average_price_by_category_chart, price_trend_overview_chart
 from sklearn.feature_extraction.text import TfidfVectorizer, ENGLISH_STOP_WORDS
 from sklearn.metrics.pairwise import cosine_similarity
 import pandas as pd
 from flask import Blueprint
 from flask import jsonify
 from flask import request
+from flask import Response
 
 from services import matched
 
@@ -399,6 +401,34 @@ def deals():
     result.sort(key=lambda d: d["price_trend"] == "falling", reverse=True)
 
     return jsonify(result)
+
+
+@api.route("/analytics/average-price-by-category.png")
+def analytics_average_price_by_category():
+
+    png_bytes = average_price_by_category_chart(matched)
+
+    return Response(png_bytes, mimetype="image/png")
+
+
+@api.route("/analytics/price-trend-overview.png")
+def analytics_price_trend_overview():
+    # Reads the clearly-labeled SIMULATED demo history file, never the
+    # real price_history.csv - see matcher/generate_demo_price_history.py
+    # for why. If that file doesn't exist yet, this returns a 404 rather
+    # than silently falling back to (insufficient) real data.
+
+    try:
+        demo_history = pd.read_csv("data/processed/price_history_demo.csv")
+    except FileNotFoundError:
+        return jsonify({
+            "error": "Demo price history not generated yet. Run "
+                     "matcher/generate_demo_price_history.py first."
+        }), 404
+
+    png_bytes = price_trend_overview_chart(demo_history)
+
+    return Response(png_bytes, mimetype="image/png")
 
 
 @api.route("/search")

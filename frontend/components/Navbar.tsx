@@ -24,6 +24,9 @@ export default function Navbar() {
           <Link href="/deals" className="transition hover:text-brand-300">
             Deals
           </Link>
+          <Link href="/analytics" className="transition hover:text-brand-300">
+            Analytics
+          </Link>
           <Link href="/about" className="transition hover:text-brand-300">
             About
           </Link>
