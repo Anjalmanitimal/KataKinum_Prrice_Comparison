@@ -3,8 +3,8 @@ export function formatPriceDate(scrapedAt: string | null | undefined): string {
     return "Date unknown";
   }
 
-  // Backend sends "YYYY-MM-DD HH:MM:SS" (space, not "T") - Safari/older
-  // engines don't parse that format reliably via `new Date(...)` directly.
+  // Backend sends "YYYY-MM-DD HH:MM:SS" (space, not "T"). Safari and
+  // older engines don't parse that format reliably via `new Date(...)`.
   const parsed = new Date(scrapedAt.replace(" ", "T"));
 
   if (isNaN(parsed.getTime())) {
