@@ -9,9 +9,11 @@ from scraper.daraz_scraper import scrape_daraz
 from scraper.hukut_scraper import scrape_hukut
 from scraper.oliz_scraper import scrape_oliz
 from matcher.clean_products import clean_product_name, extract_price
+from matcher.product_matcher import has_conflict, normalize_model
 from rapidfuzz import fuzz
 from price_history import record_snapshot, get_price_trend
-from analytics import average_price_by_category_chart, price_trend_overview_chart
+from analytics import average_price_by_category_chart, price_trend_overview_chart, category_price_distribution_chart
+from price_anomaly import compute_category_bounds, classify_anomaly
 from sklearn.feature_extraction.text import TfidfVectorizer, ENGLISH_STOP_WORDS
 from sklearn.metrics.pairwise import cosine_similarity
 import pandas as pd
@@ -21,6 +23,11 @@ from flask import request
 from flask import Response
 
 from services import matched
+
+# Computed once from the static dataset at startup. Live-scraped rows never
+# have a "category" assigned, so they can't skew this even though `matched`
+# gets appended to at runtime - safe to compute once rather than per-request.
+CATEGORY_PRICE_BOUNDS = compute_category_bounds(matched)
 
 api = Blueprint("api", __name__)
 
@@ -110,6 +117,18 @@ _LIVE_MATCH_THRESHOLD = 85
 
 
 def assign_live_product_ids(products):
+    """Groups same-batch live-scraped listings into product identities.
+
+    Must use the same has_conflict() guard as the batch matcher
+    (matcher/product_matcher.py) - without it, fuzz.token_sort_ratio alone
+    scores e.g. "Apple iPhone 15 128GB Black" vs "Apple iPhone 14 128GB
+    Black" at ~96% similarity, merging two different phones into one
+    product_id. group_by_product() then shows whichever name was seen
+    first but picks the cheapest offer across the whole merged group, so
+    a search for "iphone 15" could display the iPhone 15's name with the
+    iPhone 14 listing's price and store link.
+    """
+
     global _live_id_counter
 
     known = []
@@ -122,18 +141,20 @@ def assign_live_product_ids(products):
         product["clean_name"] = clean_name
         product["price_numeric"] = price_numeric
 
+        normalized = normalize_model(clean_name)
+
         matched_id = None
 
         for entry in known:
             similarity = fuzz.token_sort_ratio(clean_name, entry["name"])
-            if similarity >= _LIVE_MATCH_THRESHOLD:
+            if similarity >= _LIVE_MATCH_THRESHOLD and not has_conflict(normalized, entry["normalized"]):
                 matched_id = entry["id"]
                 break
 
         if matched_id is None:
             _live_id_counter += 1
             matched_id = f"L{_live_id_counter:04d}"
-            known.append({"id": matched_id, "name": clean_name})
+            known.append({"id": matched_id, "name": clean_name, "normalized": normalized})
 
         product["product_id"] = matched_id
 
@@ -153,6 +174,7 @@ def group_by_product(records):
                 "product_id": pid,
                 "product_name": row.get("product_name"),
                 "clean_name": row.get("clean_name"),
+                "category": row.get("category"),
                 "offers": [],
                 "relevance_score": relevance,
             }
@@ -168,6 +190,7 @@ def group_by_product(records):
             "price": row.get("price"),
             "price_numeric": row.get("price_numeric"),
             "link": row.get("link"),
+            "scraped_at": row.get("scraped_at"),
         })
 
     grouped = []
@@ -186,6 +209,11 @@ def group_by_product(records):
         group["lowest_price"] = best["price_numeric"]
         group["lowest_price_display"] = best["price"]
         group["store_count"] = len(group["offers"])
+        group["price_anomaly"] = classify_anomaly(
+            best["price_numeric"],
+            group["category"],
+            CATEGORY_PRICE_BOUNDS,
+        )
 
         grouped.append(group)
 
@@ -407,6 +435,14 @@ def deals():
 def analytics_average_price_by_category():
 
     png_bytes = average_price_by_category_chart(matched)
+
+    return Response(png_bytes, mimetype="image/png")
+
+
+@api.route("/analytics/category-price-distribution.png")
+def analytics_category_price_distribution():
+
+    png_bytes = category_price_distribution_chart(matched)
 
     return Response(png_bytes, mimetype="image/png")
 
