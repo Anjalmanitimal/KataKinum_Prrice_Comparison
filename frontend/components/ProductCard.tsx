@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import type { ProductGroup } from "@/types/product";
+import { formatPriceDate } from "@/lib/formatDate";
 
 const STORE_STYLES: Record<string, string> = {
   Daraz: "bg-orange-50 text-orange-700 ring-orange-200",
@@ -13,7 +14,8 @@ function storeStyle(marketplace: string) {
 }
 
 export default function ProductCard({ product }: { product: ProductGroup }) {
-  const cheapestMarketplace = product.offers[0]?.marketplace;
+  const cheapestOffer = product.offers[0];
+  const cheapestMarketplace = cheapestOffer?.marketplace;
 
   return (
     <div className="group flex h-full flex-col rounded-2xl border border-surface-border bg-surface p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-brand-500/10">
@@ -36,6 +38,20 @@ export default function ProductCard({ product }: { product: ProductGroup }) {
       <p className="mt-1 text-sm font-medium text-accent-strong">
         Lowest price{cheapestMarketplace ? ` · ${cheapestMarketplace}` : ""}
       </p>
+      <p className="mt-0.5 text-xs text-slate-400">
+        Price as of {formatPriceDate(cheapestOffer?.scraped_at)}
+      </p>
+
+      {product.price_anomaly === "cheap" && (
+        <span className="mt-2 inline-flex w-fit items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-inset ring-emerald-200">
+          ⚡ Great price for this category
+        </span>
+      )}
+      {product.price_anomaly === "expensive" && (
+        <span className="mt-2 inline-flex w-fit items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700 ring-1 ring-inset ring-amber-200">
+          Priced high for this category
+        </span>
+      )}
 
       <div className="mt-5 flex flex-wrap gap-2">
         {product.offers.map((offer, index) => (
