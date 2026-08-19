@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getProduct, getPriceTrend } from "@/lib/api";
 import PriceSparkline from "@/components/PriceSparkline";
+import { formatPriceDate } from "@/lib/formatDate";
 import type { PriceTrend } from "@/types/product";
 
 type Listing = {
@@ -14,6 +15,7 @@ type Listing = {
   price: string;
   price_numeric: number | null;
   link: string;
+  scraped_at: string | null;
 };
 
 const STORE_STYLES: Record<string, string> = {
@@ -265,6 +267,7 @@ export default function ProductPage() {
               <tr>
                 <th className="px-6 py-4 text-left">Store</th>
                 <th className="px-6 py-4 text-left">Price</th>
+                <th className="px-6 py-4 text-left">Price Date</th>
                 <th className="px-6 py-4 text-left">Visit</th>
               </tr>
 
@@ -292,6 +295,10 @@ export default function ProductPage() {
                         Best
                       </span>
                     )}
+                  </td>
+
+                  <td className="px-6 py-4 text-sm text-slate-500">
+                    {formatPriceDate(item.scraped_at)}
                   </td>
 
                   <td className="px-6 py-4">
