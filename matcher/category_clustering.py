@@ -45,6 +45,50 @@ CLUSTER_LABELS = {
     6: "appliance",                                   # Dyson purifiers/hair dryers
 }
 
+# Checked in this order (narrower/less ambiguous categories first) since
+# some hint words aren't exclusive to one category - e.g. Samsung uses
+# "galaxy" across phones, tablets, watches and earbuds alike, so "tab"/
+# "watch"/"buds" must be checked before the generic "galaxy" catch-all.
+TRUSTED_CATEGORY_HINTS = {
+    "tablet": {"tablet", "ipad", "tab"},
+    "smartwatch": {"smartwatch"},
+    "earphone": {"earphone", "earbuds", "earbud", "airpods", "tws", "buds"},
+    "laptop": {"laptop", "notebook", "macbook", "ultrabook", "chromebook"},
+    "smartphone": {"iphone", "smartphone", "galaxy", "pixel", "redmi", "poco", "oneplus", "realme", "infinix", "tecno", "vivo", "oppo", "nothing"},
+}
+
+
+def guess_trusted_category(name):
+    """Keyword fallback for rows whose search_term isn't a trusted
+    category string - e.g. live search's search_term is the user's raw
+    query, so it almost never equals "smartphone" etc. even when the
+    result plainly is one. Without this, such rows would fall straight
+    to the K-Means model below, which was fit only on the untagged
+    general-catalog rows (bags/watches/cameras/powerbanks/audio/
+    appliances) and has never seen a phone or laptop during training -
+    it can only output one of those 6 labels, so it would confidently
+    but wrongly bucket a phone into e.g. "bag". Heuristic, not
+    guaranteed correct, but far more reliable than that for these
+    common, recognizable cases.
+    """
+
+    words = set((name or "").lower().split())
+
+    # "Galaxy Watch" and "Galaxy Buds" would otherwise fall through to the
+    # generic "galaxy" -> smartphone catch-all below, since neither
+    # contains the literal word "smartwatch" or a "buds"-prefixed word
+    # together with "galaxy" specifically (as opposed to other brands'
+    # earbuds, already caught by the earphone hints).
+    if {"galaxy", "watch"} <= words:
+        return "smartwatch"
+
+    for category, hints in TRUSTED_CATEGORY_HINTS.items():
+        if any(word.startswith(hint) for word in words for hint in hints):
+            return category
+
+    return None
+
+
 NEW_CATEGORY_LABELS = {
     "bag": "Bags & Backpacks",
     "watch": "Watches",
@@ -55,9 +99,54 @@ NEW_CATEGORY_LABELS = {
 }
 
 
-def auto_categorize(df):
+def fit_categorizer(texts):
+    """Fit the TF-IDF vectorizer + KMeans model once against the batch
+    dataset, so later calls (e.g. categorizing a newly live-scraped
+    product) can reuse this exact fitted model via categorize_names()
+    instead of refitting - refitting would renumber the clusters and
+    silently invalidate CLUSTER_LABELS, the same fragility documented
+    above for matcher.product_matcher regenerating the dataset.
+    """
+
+    vectorizer = TfidfVectorizer(stop_words="english", max_features=400)
+    vectors = vectorizer.fit_transform(texts)
+
+    model = KMeans(n_clusters=N_CLUSTERS, random_state=RANDOM_STATE, n_init=10)
+    model.fit(vectors)
+
+    return vectorizer, model
+
+
+def categorize_names(names, vectorizer, model):
+    """Classify product names with an already-fitted vectorizer/model
+    (see fit_categorizer) - uses .transform()/.predict(), never refits.
+    """
+
+    vectors = vectorizer.transform(names)
+    cluster_ids = model.predict(vectors)
+
+    return [CLUSTER_LABELS.get(c) for c in cluster_ids]
+
+
+def auto_categorize(df, return_model=False):
     """Return a category label per row: the trusted search_term where
     available, otherwise a K-Means-discovered label, otherwise None.
+
+    The K-Means fit itself is restricted to original batch rows (product
+    IDs prefixed "P", assigned by matcher/product_matcher.py) - live
+    search results (prefixed "L", see backend/routes.py) accumulate in
+    the database indefinitely as people search, and must never join the
+    fit pool, or the cluster boundaries - and therefore CLUSTER_LABELS,
+    hand-tuned against the original batch composition - would silently
+    drift further every time more live data piles up. Live rows still
+    get categorized, just via categorize_names() against this same
+    fitted model afterwards (see category_clustering.categorize_pending
+    and backend/routes.py's assign_categories_to_new_rows), never by
+    joining the fit itself.
+
+    return_model=True also returns the fitted (vectorizer, model) so the
+    caller can categorize other rows later via categorize_names()
+    without refitting.
     """
 
     category = df["search_term"].where(
@@ -65,22 +154,47 @@ def auto_categorize(df):
         None
     )
 
-    untagged_mask = category.isna()
+    is_batch_row = df["product_id"].astype(str).str.startswith("P")
+    untagged_mask = category.isna() & is_batch_row
     untagged = df[untagged_mask]
 
     if len(untagged) < N_CLUSTERS:
-        return category
+        return (category, None, None) if return_model else category
 
     texts = untagged["clean_name"].fillna("").astype(str).tolist()
 
-    vectorizer = TfidfVectorizer(stop_words="english", max_features=400)
-    vectors = vectorizer.fit_transform(texts)
+    vectorizer, model = fit_categorizer(texts)
 
-    model = KMeans(n_clusters=N_CLUSTERS, random_state=RANDOM_STATE, n_init=10)
-    cluster_ids = model.fit_predict(vectors)
-
-    discovered = [CLUSTER_LABELS.get(c) for c in cluster_ids]
+    discovered = categorize_names(texts, vectorizer, model)
 
     category.loc[untagged_mask] = discovered
+
+    if return_model:
+        return category, vectorizer, model
+
+    return category
+
+
+def categorize_pending(df, vectorizer, model):
+    """Assign a category to every row still missing one after
+    auto_categorize() - in practice, live-scraped rows (see the
+    docstring above). Tries the keyword guess first, then falls back to
+    the already-fitted K-Means model. Never refits.
+    """
+
+    category = df["category"].copy()
+    unresolved_mask = category.isna()
+
+    if not unresolved_mask.any():
+        return category
+
+    guessed = df.loc[unresolved_mask, "clean_name"].apply(guess_trusted_category)
+    category.loc[unresolved_mask] = guessed
+
+    unresolved_mask = category.isna()
+
+    if unresolved_mask.any() and vectorizer is not None and model is not None:
+        names = df.loc[unresolved_mask, "clean_name"].fillna("").astype(str).tolist()
+        category.loc[unresolved_mask] = categorize_names(names, vectorizer, model)
 
     return category
