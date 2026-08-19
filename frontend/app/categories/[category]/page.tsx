@@ -90,6 +90,13 @@ export default function CategoryPage() {
 
         {!loading && !error && products.length > 0 && (() => {
           const filtered = applyFilters(products, filters);
+          const availableTypes = Array.from(
+            new Set(
+              products
+                .map((p) => p.listing_type)
+                .filter((t): t is string => Boolean(t))
+            )
+          );
 
           return (
             <div className="mt-4">
@@ -97,6 +104,7 @@ export default function CategoryPage() {
                 filters={filters}
                 onChange={setFilters}
                 resultCount={filtered.length}
+                availableTypes={availableTypes}
               />
 
               {filtered.length === 0 ? (

@@ -7,6 +7,11 @@ export interface FilterState {
   store: string;
   minPrice: string;
   maxPrice: string;
+  search: string;
+  // Types the user has toggled OFF. Empty means every type present in
+  // the results is shown, matching "if shown mobile only keep mobile
+  // only, if shown mobile and case keep both" by default.
+  excludedTypes: string[];
 }
 
 export const DEFAULT_FILTERS: FilterState = {
@@ -14,6 +19,8 @@ export const DEFAULT_FILTERS: FilterState = {
   store: "all",
   minPrice: "",
   maxPrice: "",
+  search: "",
+  excludedTypes: [],
 };
 
 export function applyFilters(
@@ -21,6 +28,19 @@ export function applyFilters(
   filters: FilterState
 ): ProductGroup[] {
   let result: ProductGroup[] = products;
+
+  if (filters.search.trim()) {
+    const query = filters.search.trim().toLowerCase();
+    result = result.filter((p) =>
+      p.product_name.toLowerCase().includes(query)
+    );
+  }
+
+  if (filters.excludedTypes.length > 0) {
+    result = result.filter(
+      (p) => !p.listing_type || !filters.excludedTypes.includes(p.listing_type)
+    );
+  }
 
   if (filters.store !== "all") {
     result = result

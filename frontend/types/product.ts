@@ -11,6 +11,7 @@ export interface ProductGroup {
   product_name: string;
   clean_name: string | null;
   category?: string | null;
+  listing_type?: string | null;
   offers: StoreOffer[];
   lowest_price: number | null;
   lowest_price_display: string | null;
