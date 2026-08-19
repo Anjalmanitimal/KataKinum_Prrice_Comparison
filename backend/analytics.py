@@ -76,6 +76,69 @@ def average_price_by_category_chart(df):
     return _fig_to_png_bytes(fig)
 
 
+def category_price_distribution_chart(df):
+    """Box plot of price spread per category, with statistical outliers
+    marked as individual points.
+
+    Matplotlib's default box plot whiskers extend to 1.5x IQR beyond the
+    box - the exact same bound used by price_anomaly.py's outlier
+    detection - so the red dots shown here correspond exactly to what
+    gets flagged as an unusually cheap/expensive price in the app itself.
+    A log scale is used on the price axis since categories span very
+    different price ranges (e.g. bags ~Rs 3-10k vs laptops ~Rs 80-150k) -
+    without it, cheaper categories would be squashed unreadably flat next
+    to the more expensive ones.
+    """
+
+    priced = df.dropna(subset=["price_numeric", "category"])
+
+    categories = sorted(
+        priced["category"].unique(),
+        key=lambda cat: priced[priced["category"] == cat]["price_numeric"].median(),
+    )
+
+    data = [
+        priced[priced["category"] == cat]["price_numeric"].values
+        for cat in categories
+    ]
+    labels = [CATEGORY_LABELS.get(cat, cat) for cat in categories]
+
+    fig, ax = plt.subplots(figsize=(9, 6))
+
+    ax.boxplot(
+        data,
+        tick_labels=labels,
+        vert=False,
+        patch_artist=True,
+        boxprops=dict(facecolor=BRAND_COLOR, alpha=0.55, edgecolor=INK_COLOR),
+        medianprops=dict(color=INK_COLOR, linewidth=2),
+        whiskerprops=dict(color=INK_COLOR),
+        capprops=dict(color=INK_COLOR),
+        flierprops=dict(
+            marker="o",
+            markerfacecolor="#dc2626",
+            markeredgecolor="none",
+            markersize=5,
+            alpha=0.75,
+        ),
+    )
+
+    ax.set_xscale("log")
+    ax.set_xlabel("Price (Rs, log scale)")
+    ax.set_title(
+        "Price Distribution by Category\n(red dots = statistical outliers)",
+        fontsize=14,
+        fontweight="bold",
+        color=INK_COLOR,
+    )
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    fig.tight_layout()
+
+    return _fig_to_png_bytes(fig)
+
+
 TREND_MIN_POINTS = 3
 TREND_THRESHOLD = 0.01  # matches backend/price_history.py's real trend classifier
 

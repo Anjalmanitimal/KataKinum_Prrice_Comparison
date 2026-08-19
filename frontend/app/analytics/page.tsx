@@ -23,6 +23,12 @@ export default function AnalyticsPage() {
           />
 
           <ChartCard
+            title="Price Distribution by Category"
+            description="The full price spread per category, not just the average — box shows the typical range, red dots are statistical outliers (the same ones flagged as 'unusually cheap' or 'priced high' badges on product cards)."
+            imageUrl={`${API}/analytics/category-price-distribution.png`}
+          />
+
+          <ChartCard
             title="Price Trend Overview"
             description="How many tracked products are trending up, down, or holding steady. Real price tracking is still early (see any product page for live, honest 'still gathering data' status) — this chart uses simulated multi-week history to demonstrate what it will look like once real tracking has run for longer."
             imageUrl={`${API}/analytics/price-trend-overview.png`}
