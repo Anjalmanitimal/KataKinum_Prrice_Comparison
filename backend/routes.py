@@ -14,6 +14,7 @@ from rapidfuzz import fuzz
 from price_history import record_snapshot, get_price_trend
 from analytics import average_price_by_category_chart, price_trend_overview_chart, category_price_distribution_chart
 from price_anomaly import compute_category_bounds, classify_anomaly
+from db import save_products
 from sklearn.feature_extraction.text import TfidfVectorizer, ENGLISH_STOP_WORDS
 from sklearn.metrics.pairwise import cosine_similarity
 import pandas as pd
@@ -22,7 +23,8 @@ from flask import jsonify
 from flask import request
 from flask import Response
 
-from services import matched
+from services import matched, category_vectorizer, category_model
+from matcher.category_clustering import categorize_pending, TRUSTED_CATEGORIES
 
 # Computed once from the static dataset at startup. Live-scraped rows never
 # have a "category" assigned, so they can't skew this even though `matched`
@@ -112,7 +114,26 @@ def filter_and_rank(products, query):
     return [product for exact_phrase, score, product in ranked]
 
 
-_live_id_counter = 0
+def _init_live_id_counter(df):
+    """Live results now get persisted to the database (see /search), so
+    the counter must resume from the highest existing "L####" id instead
+    of restarting at 0 on every server restart - otherwise a fresh L0001
+    assigned after a restart could collide with a completely different
+    product already saved under that same id from a previous run.
+    """
+
+    ids = df["product_id"].dropna().astype(str)
+    live_ids = ids[ids.str.startswith("L")]
+
+    if len(live_ids) == 0:
+        return 0
+
+    numbers = live_ids.str.extract(r"L(\d+)")[0].dropna().astype(int)
+
+    return int(numbers.max()) if len(numbers) else 0
+
+
+_live_id_counter = _init_live_id_counter(matched)
 _LIVE_MATCH_THRESHOLD = 85
 
 
@@ -161,6 +182,22 @@ def assign_live_product_ids(products):
     return products
 
 
+def assign_categories_to_new_rows(df):
+    """Give freshly live-scraped rows a category so they show up under
+    Categories browsing too, not just search results. Shares its
+    fallback logic (keyword guess, then the batch-fitted K-Means model)
+    with categorize_pending(), which covers the same rows again on the
+    next server restart, once they're persisted but search_term still
+    isn't a trusted category string.
+    """
+
+    search_terms = df["search_term"].fillna("")
+    df["category"] = search_terms.where(search_terms.isin(TRUSTED_CATEGORIES), None)
+    df["category"] = categorize_pending(df, category_vectorizer, category_model)
+
+    return df
+
+
 def group_by_product(records):
     groups = {}
     order = []
@@ -175,6 +212,7 @@ def group_by_product(records):
                 "product_name": row.get("product_name"),
                 "clean_name": row.get("clean_name"),
                 "category": row.get("category"),
+                "listing_type": listing_type(row.get("product_name"), row.get("category")),
                 "offers": [],
                 "relevance_score": relevance,
             }
@@ -333,6 +371,53 @@ def is_accessory(name):
     name = (name or "").lower()
     lead = " ".join(name.split()[:ACCESSORY_LEAD_WORDS])
     return any(word in lead for word in ACCESSORY_WORDS)
+
+
+ACCESSORY_TYPE_LABELS = {
+    "case": "Case & Cover",
+    "cover": "Case & Cover",
+    "back cover": "Case & Cover",
+    "pouch": "Case & Cover",
+    "skin": "Case & Cover",
+    "prodigee": "Case & Cover",
+    "charger": "Charger & Adapter",
+    "adapter": "Charger & Adapter",
+    "cable": "Cable",
+    "tempered": "Screen Protector",
+    "glass": "Screen Protector",
+    "protector": "Screen Protector",
+    "screen guard": "Screen Protector",
+    "earbuds": "Audio Accessory",
+    "earphone": "Audio Accessory",
+    "headphone": "Audio Accessory",
+    "strap": "Strap",
+    "stand": "Stand & Dock",
+    "holder": "Stand & Dock",
+    "dock": "Stand & Dock",
+    "docking station": "Stand & Dock",
+    "hub": "Stand & Dock",
+}
+
+
+def listing_type(name, category):
+    """A short, human-readable type label driving the frontend's dynamic
+    type filter (e.g. searching "iphone 17" can legitimately surface the
+    phone itself alongside cases/chargers that mention it - rather than
+    hiding those, the frontend shows a filter listing only the types
+    actually present in that result set, so a user who wants just the
+    phone can narrow to it).
+    """
+
+    lead = " ".join((name or "").lower().split()[:ACCESSORY_LEAD_WORDS])
+
+    for word in ACCESSORY_WORDS:
+        if word in lead:
+            return ACCESSORY_TYPE_LABELS.get(word, "Accessory")
+
+    if category and category in CATEGORY_LABELS:
+        return CATEGORY_LABELS[category]
+
+    return "Other"
 
 
 def semantic_match(query, df, text_column="clean_name", top_k=40):
@@ -506,9 +591,13 @@ def search():
         keep="first"
     )
 
-    combined = combined[
-        ~combined["product_name"].fillna("").apply(is_accessory)
-    ]
+    # No blanket accessory exclusion here (unlike /category/<name>): both
+    # exact_result (literal query substring) and semantic_result (every
+    # query word present) are already strongly query-relevant, so a case
+    # or charger that genuinely matches the search is worth showing - the
+    # frontend's dynamic type filter lets the user narrow to just the
+    # phone if that's all they want, rather than the backend hiding
+    # accessories unconditionally.
 
     if len(combined) > 0:
 
@@ -581,10 +670,20 @@ def search():
     ]
 
     if live_results:
+        live_df = assign_categories_to_new_rows(pd.DataFrame(live_results))
+        live_results = live_df.to_dict(orient="records")
+
         matched = pd.concat(
-            [matched, pd.DataFrame(live_results)],
+            [matched, live_df],
             ignore_index=True
         )
+
+        # Persist newly-discovered live results into the database so they
+        # survive a server restart instead of only living in this
+        # in-memory `matched` DataFrame - a repeat search for the same
+        # product later (even after a restart) then hits the fast
+        # dataset-match path above instead of re-scraping every time.
+        save_products(matched)
 
     groups = group_by_product(live_results)
 
