@@ -17,6 +17,7 @@ Supports two modes:
 
 import time
 import csv
+from datetime import datetime
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -131,7 +132,10 @@ def scrape_daraz(
                 "price": price,
                 "marketplace": "Daraz",
                 "search_term": search_term,
-                "link": link
+                "link": link,
+                "scraped_at": datetime.now().strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
 
             })
 
